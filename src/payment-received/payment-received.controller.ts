@@ -1,5 +1,5 @@
 // src/webhook/asaas.controller.ts
-import { Controller, Post, Body, HttpCode, HttpStatus, Headers, Logger } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Headers, Logger, UnauthorizedException } from '@nestjs/common';
 import { AsaasWebhookPayloadDto } from './dto/asaas-payment-payload.dto'
  // Certifique-se de que o caminho está correto
 
@@ -24,14 +24,11 @@ handlePaymentWebhook(
 
     // --- ETAPA DE SEGURANÇA (IMPORTANTE!) ---
     // Verifique o 'asaas-webhook-token' aqui se você configurou um no painel do Asaas.
-    // const NossoTokenSecretoConfiguradoNoAsaas = process.env.ASAAS_WEBHOOK_SECRET;
-    // if (NossoTokenSecretoConfiguradoNoAsaas && asaasToken !== NossoTokenSecretoConfiguradoNoAsaas) {
-    //   this.logger.warn('Token do webhook Asaas inválido ou ausente.');
-    //   // Você pode retornar um HttpStatus.UNAUTHORIZED ou FORBIDDEN, mas para o Asaas
-    //   // não processar novamente, um 200 OK ainda pode ser o esperado, e você apenas ignora o payload.
-    //   // Consulte a documentação do Asaas sobre o comportamento esperado em caso de falha na autenticação.
-    //   // Por enquanto, apenas logamos. Na prática, não processe o payload se o token for inválido.
-    // }
+    const TokenSecreto = process.env.ASAAS_WEBHOOK_SECRET;
+    if (!TokenSecreto || asaasToken !== TokenSecreto) {
+      this.logger.warn('Token do webhook Asaas inválido ou ausente.');
+      throw new UnauthorizedException('Token inválido');
+    }
 
     // --- LÓGICA DE PROCESSAMENTO ---
     if (payload.event === 'PAYMENT_RECEIVED' || payload.event === 'PAYMENT_CONFIRMED') {
