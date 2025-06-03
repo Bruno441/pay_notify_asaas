@@ -1,12 +1,46 @@
 // src/webhook/asaas.controller.ts
-import { Controller, Post, Body, HttpCode, HttpStatus, Headers, Logger, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Headers, Logger, UnauthorizedException, Get } from '@nestjs/common';
 import { AsaasWebhookPayloadDto } from './dto/asaas-payment-payload.dto'
+import { PaymentReceivedService } from './payment-received.service';
  // Certifique-se de que o caminho está correto
 
 @Controller('payment-received') // Define a rota base para este controller
 export class PaymentReceivedController {
   private readonly logger = new Logger(PaymentReceivedController.name);
 
+  constructor(private readonly emailService: PaymentReceivedService,) {}
+
+@Get('enviar')
+  async enviarEmailDeTeste() {
+    this.logger.log('Requisição para enviar e-mail de teste recebida...');
+    try {
+      const aliasEmail = 'brunoferreiraj3@gmail.COM'; // <<< SUBSTITUA AQUI
+      const nomeDoAlias = 'Somando Sabores';    // <<< SUBSTITUA AQUI (opcional)
+      const emailDestinatario = 'assede205@gmail.COM'; // <<< SUBSTITUA AQUI
+
+      if (aliasEmail as string === 'SEU_ALIAS_VERIFICADO@EXEMPLO.COM' || emailDestinatario as string === 'EMAIL_PARA_ONDE_ENVIAR_O_TESTE@EXEMPLO.COM') {
+        this.logger.warn('Por favor, substitua os e-mails de alias e destinatário no controller de teste.');
+        return { message: 'Configure os e-mails no controller de teste primeiro!' };
+      }
+
+      await this.emailService.sendMail(
+        emailDestinatario,
+        'E-mail de Teste via NestJS e Gmail Alias',
+        `<h1>Olá!</h1>
+         <p>Este é um e-mail de teste enviado a partir da sua aplicação NestJS usando o serviço de e-mail que você configurou.</p>
+         <p>Enviado em nome de: <span class="math-inline">${nomeDoAlias} &lt;</span>${aliasEmail}&gt;</p>
+         <p>Horário: ${new Date().toLocaleString()}</p>`,
+        aliasEmail,
+        nomeDoAlias,
+      );
+      this.logger.log(`Tentativa de envio de e-mail para ${emailDestinatario} concluída.`);
+      return { message: `E-mail de teste enviado para ${emailDestinatario}! Verifique a caixa de entrada e spam.` };
+    } catch (error) {
+      this.logger.error('Falha ao enviar e-mail de teste:', error.stack);
+      return { message: 'Erro ao enviar e-mail de teste.', error: error.message };
+    }
+  }
+  
   @Post('payment') // Rota específica: POST /webhook/asaas/payment
   @HttpCode(HttpStatus.OK) // Asaas espera um status 200 OK
 handlePaymentWebhook(
