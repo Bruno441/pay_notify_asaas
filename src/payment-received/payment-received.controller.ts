@@ -9,12 +9,18 @@ export class PaymentReceivedController {
 
   @Post('payment') // Rota específica: POST /webhook/asaas/payment
   @HttpCode(HttpStatus.OK) // Asaas espera um status 200 OK
-  handlePaymentWebhook(
-    @Body() payload: AsaasWebhookPayloadDto,
+handlePaymentWebhook(
+    @Body() payload: any,
     @Headers('asaas-webhook-token') asaasToken?: string, // Para verificação de segurança
   ) {
     this.logger.log('Novo webhook de pagamento recebido do Asaas:');
-    this.logger.log(payload);
+    this.logger.log(`Evento: ${payload.data.event}`);
+    this.logger.log(`ID do pagamento: ${payload.data.payment.id}`);
+    this.logger.log(`Valor: ${payload.data.payment.value}`);
+    this.logger.log(`Cliente: ${payload.data.payment.customer}`);
+    this.logger.log(`Status: ${payload.data.payment.status}`);
+    this.logger.log(`Descrição: ${payload.data.payment.description}`);
+    this.logger.log(`Forma de pagamento: ${payload.data.payment.billingType}`);
 
     // --- ETAPA DE SEGURANÇA (IMPORTANTE!) ---
     // Verifique o 'asaas-webhook-token' aqui se você configurou um no painel do Asaas.
@@ -28,12 +34,8 @@ export class PaymentReceivedController {
     // }
 
     // --- LÓGICA DE PROCESSAMENTO ---
-    // Aqui você processará o payload.
-    // Por exemplo, verificar o payload.event e payload.payment.status
-    // e tomar ações como salvar no banco, notificar usuários, etc.
-
     if (payload.event === 'PAYMENT_RECEIVED' || payload.event === 'PAYMENT_CONFIRMED') {
-      this.logger.log(`Pagamento ID ${payload.payment.id} teve o evento: ${payload.event}`);
+      this.logger.log(`Pagamento ID ${payload.data.payment.id} teve o evento: ${payload.data.event}`);
       // Adicione sua lógica específica aqui:
       // - Salvar no banco de dados
       // - Enviar uma notificação
@@ -43,7 +45,6 @@ export class PaymentReceivedController {
     }
 
     // Responda com 200 OK para o Asaas saber que você recebeu.
-    // Se você não responder com 200, o Asaas pode tentar reenviar o webhook.
     return { message: 'Webhook recebido com sucesso!' };
   }
 }
