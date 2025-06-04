@@ -1,37 +1,44 @@
 import { Injectable, Logger } from '@nestjs/common'; // Logger importado
-import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { google } from 'googleapis';
+import axios from 'axios';
 
 @Injectable()
-export class PaymentReceivedService { // Ou EmailService, se for mais apropriado
-    private readonly logger = new Logger(PaymentReceivedService.name); // Nome do logger corrigido
+export class PaymentReceivedService { 
+    private readonly logger = new Logger(PaymentReceivedService.name); 
     private transporter: nodemailer.Transporter;
     private gmailEmail: string;
+    private urlSearchClient: string = "https://api-sandbox.asaas.com/v3/customers/";
+    private acessToken: string 
 
-    constructor(private readonly configService: ConfigService) {
-        this.gmailEmail = this.configService.get<string>('GMAIL_EMAIL') ?? '';
+    constructor() {
+        this.gmailEmail = process.env.GMAIL_EMAIL ?? '';
+
         if (!this.gmailEmail) {
             throw new Error('GMAIL_EMAIL não está configurado no .env.');
         }
-        const clientId = this.configService.get<string>('GOOGLE_OAUTH_CLIENT_ID');
-        const clientSecret = this.configService.get<string>('GOOGLE_OAUTH_CLIENT_SECRET');
-        const refreshToken = this.configService.get<string>('GOOGLE_OAUTH_REFRESH_TOKEN');
+
+        this.acessToken = process.env.TOKEN_ASAAS ?? '';
+
+        if (!this.acessToken) {
+            throw new Error('TOKEN_ASAAS não está configurado no .env.');
+        }
+
+        const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+        const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+
 
         if (!this.gmailEmail || !clientId || !clientSecret || !refreshToken) {
             this.logger.error('Credenciais do Gmail ou OAuth não configuradas corretamente no .env! O serviço de e-mail pode não funcionar.');
-            // Você pode optar por lançar um erro aqui se o envio de e-mail for crítico:
-            // throw new Error('Falha ao inicializar o serviço de e-mail: credenciais ausentes.');
-            return; // Importante: Se retornar aqui, o transporter não será configurado.
-                    // Considere se este é o comportamento desejado ou se deve lançar um erro.
+            throw new Error('Falha ao inicializar o serviço de e-mail: credenciais ausentes.');
         }
 
-        // A LÓGICA DE CONFIGURAÇÃO DO TRANSPORTER FOI MOVIDA PARA FORA DO IF ANTERIOR
         const OAuth2 = google.auth.OAuth2;
         const oauth2Client = new OAuth2(
             clientId,
             clientSecret,
-            'https://developers.google.com/oauthplayground', // URI de redirecionamento (pode ser qualquer um dos seus URIs configurados)
+            'https://developers.google.com/oauthplayground', // URL de redirecionamento para OAuth2
         );
 
         oauth2Client.setCredentials({
@@ -46,7 +53,6 @@ export class PaymentReceivedService { // Ou EmailService, se for mais apropriado
                 clientId: clientId,
                 clientSecret: clientSecret,
                 refreshToken: refreshToken,
-                // accessToken: await oauth2Client.getAccessToken(), // Nodemailer >6.3.0 geralmente lida com isso
             },
         });
 
@@ -78,8 +84,24 @@ export class PaymentReceivedService { // Ou EmailService, se for mais apropriado
             return info;
         } catch (error) {
             this.logger.error(`Erro ao enviar e-mail para ${to} de ${mailOptions.from}:`, error.message || error);
-            // Você pode querer extrair mais informações do erro, como error.response
-            throw error; // Re-lança o erro para ser tratado pelo chamador
+            throw error; 
         }
     }
-} // Removida a chave extra que estava aqui
+
+    async getClientById(clientId: string) {
+        const url = `${this.urlSearchClient}${clientId}`;
+        const headers = {
+            'Content-Type': 'application/json',
+            'access_token': this.acessToken,
+        };
+
+        try {
+            const response = await axios.get(url, { headers });
+            this.logger.log(`Cliente encontrado: ${JSON.stringify(response.data)}`);
+            return response;
+        } catch (error) {
+            this.logger.error(`Erro ao buscar cliente com ID ${clientId}:`, error.response?.data || error.message || error);
+            throw error;
+        }
+    }
+}
