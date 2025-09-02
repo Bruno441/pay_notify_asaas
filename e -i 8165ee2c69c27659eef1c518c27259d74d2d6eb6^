@@ -1,0 +1,65 @@
+[33mcommit fb8c40ad0304a0864b2e439a254001c9aa89d3e6[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Bruno <brunoferreiraj3@gmail.com>
+Date:   Tue Sep 2 19:57:32 2025 -0300
+
+    teste
+
+[33mcommit e9c436a5f9671c3b047482fb63d3ab3b423deab5[m
+Author: Bruno <brunoferreiraj3@gmail.com>
+Date:   Tue Sep 2 19:54:04 2025 -0300
+
+    teste
+
+[33mcommit ffd3101284f04183a06fb0d3ef51de3ba60c70d5[m
+Author: Bruno <brunoferreiraj3@gmail.com>
+Date:   Tue Sep 2 19:53:25 2025 -0300
+
+    fiz: consertando erros no env.example
+
+[33mcommit e0d7d07d88ca0c64650a0c16b5760f9052b9d6db[m
+Author: Bruno <brunoferreiraj3@gmail.com>
+Date:   Tue Sep 2 19:50:25 2025 -0300
+
+    subindo assets
+
+[33mcommit 8165ee2c69c27659eef1c518c27259d74d2d6eb6[m
+Author: Bruno <brunoferreiraj3@gmail.com>
+Date:   Tue Aug 26 00:00:07 2025 -0300
+
+    fix: Atualizando código deixando mais alinhado com as boas práticas
+
+[33mcommit 9fa3c3642e5fb8aad539cf6ab5349b33dc0bb210[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Bruno <brunoferreiraj3@gmail.com>
+Date:   Wed Jun 4 18:18:40 2025 -0300
+
+    fix: Melhorando recebimento de webhook
+
+[33mcommit 7bf273d96eb2a4b1cd268e161467db19d54e8d89[m
+Author: brunoparaty <bruno.ferreira@paratyenergia.com.br>
+Date:   Tue Jun 3 18:05:14 2025 -0300
+
+    feat/Adicionando funcionalidade de enviar email
+
+[33mcommit 2052a4022ae08548445eba448b0fd7dd31f95c1f[m
+Author: brunoparaty <bruno.ferreira@paratyenergia.com.br>
+Date:   Tue Jun 3 13:34:19 2025 -0300
+
+    feat/adicionando token para verificação
+
+[33mcommit afa96a3c5e2afe61ad8852f09c5f8f76a7231407[m
+Author: Bruno <brunoferreiraj3@gmail.com>
+Date:   Mon Jun 2 23:43:10 2025 -0300
+
+    fix/consertando alguns erros
+
+[33mcommit d0f4aa1dc168d76adaa38ac1f624b468c99f8258[m
+Author: brunoparaty <bruno.ferreira@paratyenergia.com.br>
+Date:   Mon Jun 2 13:28:11 2025 -0300
+
+    feat/Começando projeto em Nest
+
+[33mcommit a46970e6402ad89ea5bf51580174863745f7c3e2[m
+Author: Bruno Ferreira <100526804+Bruno441@users.noreply.github.com>
+Date:   Tue May 13 21:20:12 2025 -0300
+
+    Create README.md
