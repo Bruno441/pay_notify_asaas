@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { PaymentReceivedController } from './payment-received.controller';
-import { PaymentReceivedService } from './payment-received.service';
+import { PaymentReceivedController } from './payment.controller';
+import { PaymentReceivedService } from './payment.service';
 
 @Module({
   imports: [ConfigModule.forRoot()],

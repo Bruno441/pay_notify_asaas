@@ -1,8 +1,3 @@
-// src/webhook/dto/asaas-payment-payload.dto.ts
-import { Type } from 'class-transformer';
-import { IsString, IsObject, ValidateNested, IsNotEmpty } from 'class-validator';
-
-// Define a estrutura esperada para o objeto 'payment'
 export class AsaasWebhookPayloadDto {
   id: string;
   event: string;

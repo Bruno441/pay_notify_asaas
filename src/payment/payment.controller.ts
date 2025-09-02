@@ -45,7 +45,7 @@ export class PaymentReceivedController {
         const aliasEmail = 'brunoferreiraj3@gmail.com';
         const nomeDoAlias = 'Somando Sabores';
 
-        const logoUrl = 'http://localhost:3000/assets/logo.png';
+        const logoUrl = 'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
         const htmlContent = `
               <!DOCTYPE html>
               <html lang="pt-BR">
