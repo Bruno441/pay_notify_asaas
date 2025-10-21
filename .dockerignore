@@ -1,0 +1,13 @@
+# Arquivos do Git e GitHub
+.git
+.github
+.gitignore
+
+# Dependências que serão instaladas dentro do container
+node_modules
+
+# Arquivos de build que serão gerados dentro do container
+dist
+
+# Arquivos de ambiente local (NUNCA devem ir para a imagem)
+.env
