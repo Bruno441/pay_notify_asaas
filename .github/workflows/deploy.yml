@@ -1,0 +1,40 @@
+name: Deploy NestJS App to Elastic Beanstalk
+
+# Gatilho: Isto corre sempre que fizer um push para a branch 'main'
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    # Usa uma máquina virtual Linux fresca para correr o deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Faz o checkout (download) do seu código para a máquina virtual
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      # 2. Configura as credenciais da AWS (lê os Secrets)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 3. Cria um ficheiro .zip com todo o seu código
+      # O Beanstalk (com Docker) recebe o código-fonte, não a imagem pronta
+      - name: Generate deployment package
+        run: zip -r deploy.zip . -x ".git/*" ".github/*" "node_modules/*" ".env"
+
+      # 4. Envia o .zip para o Elastic Beanstalk para fazer o deploy
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          application_name: ${{ secrets.EB_APPLICATION_NAME }}
+          environment_name: ${{ secrets.EB_ENVIRONMENT_NAME }}
+          version_label: "v${{ github.sha }}" # Cria uma etiqueta de versão única
+          region: ${{ secrets.AWS_REGION }}
+          deployment_package: deploy.zip # O ficheiro .zip que acabámos de criar
