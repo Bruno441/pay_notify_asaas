@@ -13,7 +13,7 @@ RUN npm install
 COPY . .
 
 # Roda o script de 'build' do NestJS
-RUN npm run build
+RUN NODE_OPTIONS=--max-old-space-size=2048 npm run build
 
 # --- Estágio 2: Produção (Execução) ---
 # Começamos de uma imagem limpa para ser mais leve
