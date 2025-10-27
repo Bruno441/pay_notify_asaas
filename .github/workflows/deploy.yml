@@ -29,7 +29,7 @@ jobs:
       - name: Generate deployment package
         run: zip -r deploy.zip . -x ".git/*" ".github/*" "node_modules/*" ".env"
 
-      # 4. Envia o .zip para o Elastic Beanstalk para fazer o deploy
+      # 4. Envia o .zip para o Elastic Beanstalk para fazer o deploy 
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v21
         with:
