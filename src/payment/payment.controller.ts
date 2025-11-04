@@ -50,8 +50,8 @@ export class PaymentReceivedController {
       const responseClient = await this.PaymentReceivedService.getClientById(payload.payment.customer);
 
       // 3. Coleta os dados para o e-mail de reembolso
-      const nomeDoCliente = responseClient.name;
-      const emailDestinatario = responseClient.email;
+      const nomeDoCliente = responseClient.data.name;
+      const emailDestinatario = responseClient.data.email;
       const valor = payload.payment.value;
       const descricao = payload.payment.description;
       // Usamos a data de criação do evento de webhook como a data do reembolso
@@ -166,8 +166,8 @@ export class PaymentReceivedController {
         `Pagamento ID ${payload.payment.id} teve o evento: ${payload.event}`,
       );
       try {
-        const nomeDoCliente = responseClient.name;
-        const emailDestinatario = responseClient.email;
+        const nomeDoCliente = responseClient.data.name;
+        const emailDestinatario = responseClient.data.email;
         const valor = payload.payment.value;
         const descricao = payload.payment.description;
         const dataPagamento = payload.payment.confirmedDate;
