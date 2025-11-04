@@ -143,12 +143,12 @@ export class PaymentReceivedController {
   @Post('payment-received')
   @HttpCode(HttpStatus.OK)
   async handlePaymentWebhook(
-    @Body() payload: any
+    @Body() body: any // Mudei o nome para 'body' para evitar confusão
   ) {
 
-    this.logger.log(payload);
+    this.logger.log(body); // Log do 'wrapper' (corpo todo)
 
-    const asaasToken = payload.accessToken;
+    const asaasToken = body.accessToken; // Correto, pega o token do 'body'
 
     const TokenSecreto = process.env.ASAAS_WEBHOOK_SECRET;
     if (!TokenSecreto || asaasToken !== TokenSecreto) {
@@ -156,21 +156,32 @@ export class PaymentReceivedController {
       throw new UnauthorizedException('Token inválido');
     }
 
-    const responseClient = await this.PaymentReceivedService.getClientById(payload.data.payment.customer);
+    // --- INÍCIO DA CORREÇÃO ---
+
+    // 'body.data' é uma STRING JSON. Temos de fazer o "parse" dela.
+    let payload: any; // Esta será a sua variável correta
+    try {
+      payload = JSON.parse(body.data);
+    } catch (e) {
+      this.logger.error('Falha ao fazer JSON.parse() do body.data. Não é um JSON válido.', e);
+      throw new BadRequestException('Payload (body.data) mal formatado.');
+    }
+
+    const responseClient = await this.PaymentReceivedService.getClientById(payload.payment.customer);
 
     if (
-      payload.data.event === 'PAYMENT_RECEIVED' ||
-      payload.data.event === 'PAYMENT_CONFIRMED'
+      payload.event === 'PAYMENT_RECEIVED' ||
+      payload.event === 'PAYMENT_CONFIRMED'
     ) {
       this.logger.log(
-        `Pagamento ID ${payload.data.payment.id} teve o evento: ${payload.data.event}`,
+        `Pagamento ID ${payload.payment.id} teve o evento: ${payload.event}`,
       );
       try {
         const nomeDoCliente = responseClient.data.name;
         const emailDestinatario = responseClient.data.email;
-        const valor = payload.data.payment.value;
-        const descricao = payload.data.payment.description;
-        const dataPagamento = payload.data.payment.confirmedDate;
+        const valor = payload.payment.value;
+        const descricao = payload.payment.description;
+        const dataPagamento = payload.payment.confirmedDate;
         const aliasEmail = 'brunoferreiraj3@gmail.com';
         const nomeDoAlias = 'Somando Sabores';
 
@@ -249,7 +260,7 @@ export class PaymentReceivedController {
         throw new BadRequestException({ message: 'Erro ao enviar e-mail de confirmação.', error: error.message });
       }
     } else {
-      this.logger.log(`Evento recebido não esperado ou não tratado: ${payload.data.event}`);
+      this.logger.log(`Evento recebido não esperado ou não tratado: ${payload.event}`);
     }
     return { message: 'Webhook recebido com sucesso!' };
   }
