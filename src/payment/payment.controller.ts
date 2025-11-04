@@ -19,7 +19,7 @@ export class PaymentReceivedController {
   async handlePaymentOverdue(
     @Body() payload: any,
   ) {
-    this.logger.log(`Pagamento ID ${payload.payment.id} está atrasado.`);
+    this.logger.log(`Pagamento ID ${payload.data.payment.id} está atrasado.`);
     // Lógica para lidar com pagamento atrasado
   }
 
@@ -38,22 +38,22 @@ export class PaymentReceivedController {
     }
 
     // Garante que estamos tratando o evento correto
-    if (payload.event !== 'PAYMENT_REFUNDED') {
-      this.logger.log(`Evento recebido não esperado neste endpoint: ${payload.event}`);
+    if (payload.data.event !== 'PAYMENT_REFUNDED') {
+      this.logger.log(`Evento recebido não esperado neste endpoint: ${payload.data.event}`);
       return { message: 'Webhook recebido, mas evento não corresponde a este endpoint.' };
     }
 
-    this.logger.log(`Pagamento ID ${payload.payment.id} foi reembolsado. Iniciando notificação.`);
+    this.logger.log(`Pagamento ID ${payload.data.payment.id} foi reembolsado. Iniciando notificação.`);
 
     try {
       // 2. Busca os dados do cliente
-      const responseClient = await this.PaymentReceivedService.getClientById(payload.payment.customer);
+      const responseClient = await this.PaymentReceivedService.getClientById(payload.data.payment.customer);
 
       // 3. Coleta os dados para o e-mail de reembolso
       const nomeDoCliente = responseClient.data.name;
       const emailDestinatario = responseClient.data.email;
-      const valor = payload.payment.value;
-      const descricao = payload.payment.description;
+      const valor = payload.data.payment.value;
+      const descricao = payload.data.payment.description;
       // Usamos a data de criação do evento de webhook como a data do reembolso
       const dataReembolso = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
       const aliasEmail = 'brunoferreiraj3@gmail.com';
@@ -156,21 +156,21 @@ export class PaymentReceivedController {
       throw new UnauthorizedException('Token inválido');
     }
 
-    const responseClient = await this.PaymentReceivedService.getClientById(payload.payment.customer);
+    const responseClient = await this.PaymentReceivedService.getClientById(payload.data.payment.customer);
 
     if (
-      payload.event === 'PAYMENT_RECEIVED' ||
-      payload.event === 'PAYMENT_CONFIRMED'
+      payload.data.event === 'PAYMENT_RECEIVED' ||
+      payload.data.event === 'PAYMENT_CONFIRMED'
     ) {
       this.logger.log(
-        `Pagamento ID ${payload.payment.id} teve o evento: ${payload.event}`,
+        `Pagamento ID ${payload.data.payment.id} teve o evento: ${payload.data.event}`,
       );
       try {
         const nomeDoCliente = responseClient.data.name;
         const emailDestinatario = responseClient.data.email;
-        const valor = payload.payment.value;
-        const descricao = payload.payment.description;
-        const dataPagamento = payload.payment.confirmedDate;
+        const valor = payload.data.payment.value;
+        const descricao = payload.data.payment.description;
+        const dataPagamento = payload.data.payment.confirmedDate;
         const aliasEmail = 'brunoferreiraj3@gmail.com';
         const nomeDoAlias = 'Somando Sabores';
 
@@ -249,7 +249,7 @@ export class PaymentReceivedController {
         throw new BadRequestException({ message: 'Erro ao enviar e-mail de confirmação.', error: error.message });
       }
     } else {
-      this.logger.log(`Evento recebido não esperado ou não tratado: ${payload.event}`);
+      this.logger.log(`Evento recebido não esperado ou não tratado: ${payload.data.event}`);
     }
     return { message: 'Webhook recebido com sucesso!' };
   }
