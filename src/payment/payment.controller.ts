@@ -143,8 +143,10 @@ export class PaymentReceivedController {
   @Post('payment-received')
   @HttpCode(HttpStatus.OK)
   async handlePaymentWebhook(
-    @Body() payload: any
-  ) {
+    @Body() payload: any
+  ) {
+
+    this.logger.log(payload);
 
     const asaasToken = payload.accessToken;
 
