@@ -143,9 +143,14 @@ export class PaymentReceivedController {
   @Post('payment-received')
   @HttpCode(HttpStatus.OK)
   async handlePaymentWebhook(
-    @Body() payload: any,
-    @Headers('asaas-webhook-token') asaasToken?: string,
-  ) {
+    @Body() payload: any,
+    @Headers() todosOsHeaders: any, // <-- Pega todos os headers
+  ) {
+    // Agora, 'todosOsHeaders' é um objeto com todos os cabeçalhos
+    // Lembre-se que eles vêm em letras minúsculas!
+    const asaasToken = todosOsHeaders['asaas-webhook-token'];
+
+    this.logger.log(todosOsHeaders)
     const TokenSecreto = process.env.ASAAS_WEBHOOK_SECRET;
     if (!TokenSecreto || asaasToken !== TokenSecreto) {
       this.logger.warn('Token do webhook Asaas inválido ou ausente.');
