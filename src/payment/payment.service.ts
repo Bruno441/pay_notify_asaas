@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import axios from 'axios';
@@ -140,12 +140,8 @@ export class PaymentReceivedService {
     }
   }
 
-  async processPaymentConfirmation(payload: any) {
-    // const asaasId = payload.payment.id;
+  async handlePaymentConfirmed(payload: any) {
     const externalReference = payload.payment.externalReference;
-    // const paymentValue = payload.payment.value;
-    // const paymentDate = new Date(payload.payment.confirmedDate || Date.now());
-    // const billingType = payload.payment.billingType;
 
     // 1. Busca Reservas da API externa
     const apiResponse = await this.getReservationsFromApi();
@@ -158,8 +154,6 @@ export class PaymentReceivedService {
       this.logger.warn(
         `Reserva não encontrada na API externa para o ID: ${externalReference}`,
       );
-      // Se não achou, não podemos confirmar status.
-      // Retornamos sucesso para não travar o webhook, mas logamos aviso.
       return { processed: false, message: 'Reserva não encontrada na API.' };
     }
 
@@ -168,8 +162,7 @@ export class PaymentReceivedService {
     );
 
     // 3. Verifica Status
-    // Status 1: Pagamento confirmado (já pago)
-    // Status 0: Pendente (processar)
+    // Status 1: Pagamento confirmado (já pago) -> Ignora
     if (reserva.status === 1) {
       this.logger.log(
         `Reserva ${externalReference} já está com status 1 (pago). Ignorando envio de e-mail.`,
@@ -177,22 +170,109 @@ export class PaymentReceivedService {
       return { processed: true, message: 'Pagamento já processado (API).' };
     }
 
+    // Status 0: Pendente -> Processa envio de e-mail
     if (reserva.status === 0) {
       this.logger.log(
         `Reserva ${externalReference} está com status 0 (pendente). Prosseguindo com envio de e-mail.`,
       );
-      // Aqui a lógica original prossegue (o controller chama sendMail depois que processPaymentConfirmation retorna).
-      // Mas espere, o controller chama sendMail DEPOIS?
-      // Vamos checar o controller. O controller chama processPaymentConfirmation E DEPOIS chama sendMail?
-      // Não, o controller original chamava sendMail DENTRO do if/else.
-      // O controller que eu refatorei chama processPaymentConfirmation E DEPOIS sendMail?
-      // Vamos ver o controller.
-      return {
-        processed: true,
-        message: 'Status verificado, e-mail será enviado.',
-      };
+
+      try {
+        const responseClient = await this.getClientById(
+          payload.payment.customer,
+        );
+
+        const nomeDoCliente = responseClient.data.name;
+        const emailDestinatario = responseClient.data.email;
+        const valor = payload.payment.value;
+        const descricao = payload.payment.description;
+        const dataPagamento = payload.payment.confirmedDate;
+        const aliasEmail = 'brunoferreiraj3@gmail.com';
+        const nomeDoAlias = 'Somando Sabores';
+
+        const logoUrl =
+          'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
+        const htmlContent = `
+              <!DOCTYPE html>
+              <html lang="pt-BR">
+              <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Confirmação de Pagamento</title>
+              </head>
+              <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+              <td style="padding: 20px 0;">
+                  <table align="center" border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                <tr>
+                    <td align="center" style="padding: 40px 0 30px 0;">
+                  <img src="${logoUrl}" alt="Logo da Empresa" width="150" style="display: block;" />
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 0 30px 20px 30px;">
+                  <h2 style="color: #333333; margin: 0;">Olá, ${nomeDoCliente}!</h2>
+                  <p style="color: #555555; font-size: 16px; line-height: 1.5;">
+                      Recebemos a confirmação de pagamento para a sua reserva. Agradecemos a preferência!
+                  </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 0 30px 30px 30px;">
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 1px dashed #D3C5E5; background-color: #fdfcff; border-radius: 8px; padding: 20px;">
+                      <tr>
+                    <td style="color: #333333; font-size: 16px;">
+                        <p style="margin: 0 0 10px 0;"><strong>Descrição:</strong><br>${descricao}</p>
+                        <p style="margin: 0 0 10px 0;"><strong>Valor:</strong><br>R$ ${valor}</p>
+                        <p style="margin: 0;"><strong>Data da confirmação:</strong><br>${dataPagamento}</p>
+                    </td>
+                      </tr>
+                  </table>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 0 30px 40px 30px; text-align: center;">
+                  <p style="color: #555555; font-size: 16px; line-height: 1.5;">
+                      Obrigado por reservar conosco!
+                  </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td bgcolor="#f4f4f4" style="padding: 30px; text-align: center;">
+                  <p style="margin: 0; color: #888888; font-size: 14px;">
+                      Atenciosamente,<br>
+                      Equipe ${nomeDoAlias}
+                  </p>
+                    </td>
+                </tr>
+                  </table>
+              </td>
+                </tr>
+            </table>
+              </body>
+              </html>
+            `;
+
+        await this.sendMail(
+          emailDestinatario,
+          'Confirmação de Reserva - Pagamento Recebido',
+          htmlContent,
+          aliasEmail,
+          nomeDoAlias,
+        );
+
+        this.logger.log('E-mail de confirmação enviado com sucesso.');
+        return { processed: true, message: 'Pagamento confirmado e e-mail enviado.' };
+
+      } catch (error) {
+        this.logger.error('Falha ao enviar e-mail de confirmação:', error.stack);
+        throw new BadRequestException({
+          message: 'Erro ao enviar e-mail de confirmação.',
+          error: error.message,
+        });
+      }
     }
 
-    return { processed: false, message: 'Status desconhecido.' };
+    return { processed: false, message: `Status desconhecido ou não tratado: ${reserva.status}` };
   }
 }
