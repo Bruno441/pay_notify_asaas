@@ -147,10 +147,9 @@ export class PaymentReceivedService {
       return { processed: true, message: 'Pagamento já processado.' };
     }
 
-    // 2. Busca a Reserva ou Pacote
+    // 2. Busca a Reserva (externalReference é id_reserva)
     let reserva: any = null;
-    let pacote: any = null;
-    let clienteId: string | null = null; // Tipagem explicita
+    let clienteId: string | null = null;
 
     if (externalReference) {
       // Tenta achar Reserva
@@ -162,33 +161,19 @@ export class PaymentReceivedService {
       if (reserva) {
         clienteId = reserva.cliente_id;
         this.logger.log(`Reserva encontrada: ${reserva.id_reserva}`);
-      } else {
-        // Se não achou reserva, tenta pacote
-        pacote = await this.prisma.pacote.findUnique({
-          where: { id_pacote: externalReference },
-          include: { precificacao: true, aluno: { include: { cliente: true } } },
-        });
-
-        if (pacote) {
-           clienteId = pacote.aluno.cliente_id;
-           this.logger.log(`Pacote encontrado: ${pacote.id_pacote}`);
-        }
       }
     }
 
-    if ((!reserva && !pacote) || !clienteId) {
+    if (!reserva || !clienteId) {
       this.logger.warn(
-        `Nenhuma Reserva ou Pacote encontrado (ou sem cliente vinculado) para externalReference: ${externalReference}.`,
+        `Nenhuma Reserva encontrada para externalReference: ${externalReference}.`,
       );
-      return { processed: false, message: 'Referência externa não encontrada no banco.' };
+      return { processed: false, message: 'Reserva não encontrada no banco.' };
     }
 
-    // O TS sabe que reserva ou pacote não são nulos aqui se validarmos, mas vamos usar optional chaining ou asserção
-    // Melhor usar if/else claro para precificacaoId
-    const precificacaoId = reserva ? reserva.precificacao_id : (pacote ? pacote.precificacao_id : null);
+    const precificacaoId = reserva.precificacao_id;
 
     if (!precificacaoId) {
-        // Should not happen given the checks above
          return { processed: false, message: 'Precificação não encontrada.' };
     }
 
@@ -203,8 +188,8 @@ export class PaymentReceivedService {
     await this.prisma.pagamento.create({
       data: {
         cliente_id: clienteId,
-        reserva_id: reserva ? reserva.id_reserva : null,
-        pacote_id: pacote ? pacote.id_pacote : null,
+        reserva_id: reserva.id_reserva,
+        pacote_id: null,
         forma_pagamento: billingType,
         valor_total: paymentValue,
         data_pagamento: paymentDate,
