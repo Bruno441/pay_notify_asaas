@@ -216,10 +216,10 @@ export class PaymentReceivedController {
       );
 
       try {
-        // --- NOVA LÓGICA DE INTEGRAÇÃO COM BANCO E IDEMPOTÊNCIA ---
+        // --- NOVA LÓGICA DE INTEGRAÇÃO COM API EXTERNA ---
         const processingResult = await this.PaymentReceivedService.processPaymentConfirmation(payload);
 
-        if (processingResult.message === 'Pagamento já processado.') {
+        if (processingResult.message === 'Pagamento já processado (API).') {
              // Se já processou, não envia e-mail novamente. Retorna sucesso imediato.
              return { received: true };
         }

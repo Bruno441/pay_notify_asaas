@@ -2,19 +2,11 @@
 
 ## Overview
 
-This project uses NestJS with Prisma (v5.x) to handle Asaas webhooks for payment notifications. The application integrates with a PostgreSQL database to verify reservations and track payments.
+This project uses NestJS to handle Asaas webhooks for payment notifications. The application now integrates with an external API (`https://somando-sabores-api.onrender.com/api/Reserva`) to verify reservation statuses instead of a direct database connection.
 
-## Deployment & Docker
+## Deployment
 
-### Docker
-The `Dockerfile` has been updated to include a copy step that transfers the generated Prisma Client artifacts from the build stage to the production stage. This ensures that the application has access to the database client at runtime.
-
-### Vercel / Build Scripts
-The `package.json` build script includes `npx prisma generate` before the NestJS build:
-```json
-"build": "npx prisma generate && nest build"
-```
-This is crucial for serverless environments (like Vercel) where the file system is ephemeral.
+The application logic has been updated to bypass Prisma/Database connection issues by relying on the external API. Prisma artifacts are still generated in the Docker build process in case they are needed later, but the application runtime does not currently instantiate the Prisma Client.
 
 ## How to Test Manually
 
@@ -22,18 +14,20 @@ You can test the webhook endpoint locally using tools like **Postman**, **Insomn
 
 ### Prerequisites
 1.  **Run the App**: Ensure your application is running locally (`npm run start:dev`) or deployed.
-2.  **Environment Variables**: Ensure `.env` is configured with `DATABASE_URL` pointing to your database and `ASAAS_WEBHOOK_SECRET` (if token validation is active).
+2.  **Environment Variables**: Ensure `ASAAS_WEBHOOK_SECRET` is configured (if token validation is active).
 
-### Test Case: Payment Received (Confirmed)
+### Test Case: Payment Received (Api Verification)
 
 **Endpoint:** `POST /payment/payment-received`
 
 **Headers:**
 *   `Content-Type`: `application/json`
-*   `asaas-webhook-token`: `YOUR_SECRET_TOKEN` (if validation is enabled via header, though the controller checks `body.accessToken` too).
+*   `asaas-webhook-token`: `YOUR_SECRET_TOKEN`
 
 **Body (JSON):**
-*   Replace `EXTERNAL_REFERENCE_UUID` with a valid `id_reserva` from your `TB_RESERVAS` table to see the database update.
+*   Replace `EXTERNAL_REFERENCE_UUID` with a valid ID that exists in the external API (`https://somando-sabores-api.onrender.com/api/Reserva`).
+*   **Scenario 1 (Already Paid)**: Use an ID where `status` is `1` in the API.
+*   **Scenario 2 (Pending)**: Use an ID where `status` is `0` in the API.
 
 ```json
 {
@@ -41,41 +35,32 @@ You can test the webhook endpoint locally using tools like **Postman**, **Insomn
   "accessToken": "YOUR_SECRET_TOKEN",
   "payment": {
     "object": "payment",
-    "id": "pay_test_123456",
+    "id": "pay_test_api_verification",
     "customer": "cus_0000055555",
     "value": 150.00,
     "netValue": 145.00,
-    "description": "Reserva Teste Manual",
-    "externalReference": "EXTERNAL_REFERENCE_UUID",
+    "description": "Reserva Teste API",
+    "externalReference": "019a7fa5-221b-78b3-b2e4-c914dccd27c8",
     "billingType": "CREDIT_CARD",
     "confirmedDate": "2025-11-23",
     "status": "CONFIRMED"
   }
 }
 ```
-*Note: The controller accepts a wrapper object where `data` might be a stringified JSON (Asaas style). If you send the object directly as above, the updated logic handles it.*
 
 **Expected Behavior:**
-1.  **Response**: HTTP 200 with body `{ "received": true }`.
-2.  **Logs**:
-    *   "Pagamento ID pay_test_123456 teve o evento: PAYMENT_CONFIRMED"
-    *   "Reserva encontrada: ..."
-    *   "Status da precificação ... atualizado para confirmado."
-    *   "Pagamento registrado na TB_PAGAMENTOS: ..."
-3.  **Database**:
-    *   `TB_PRECIFICACAO`: Status changes to `confirmado`.
-    *   `TB_PAGAMENTOS`: A new record is created with `asaas_id = pay_test_123456`.
 
-### Test Case: Idempotency (Duplicate Payment)
+1.  **If Status is 1 (Paid)**:
+    *   **Response**: HTTP 200 `{ "received": true }`.
+    *   **Logs**: "Reserva ... já está com status 1 (pago). Ignorando envio de e-mail."
+    *   **Email**: No email is sent.
 
-**Action**: Send the *exact same* payload again.
-
-**Expected Behavior:**
-1.  **Response**: HTTP 200 `{ "received": true }`.
-2.  **Logs**: "Pagamento pay_test_123456 já processado anteriormente. Ignorando."
-3.  **Database**: No duplicate record in `TB_PAGAMENTOS`.
+2.  **If Status is 0 (Pending)**:
+    *   **Response**: HTTP 200 `{ "received": true }`.
+    *   **Logs**: "Reserva ... está com status 0 (pendente). Prosseguindo com envio de e-mail."
+    *   **Email**: Email is sent to the customer.
 
 ### Troubleshooting
 
-*   **Build Errors**: If deployment fails with Prisma errors, verify that `npx prisma generate` is running.
-*   **"Reserva não encontrada"**: Check if the UUID passed in `externalReference` exists in `TB_RESERVAS`.
+*   **"Reserva não encontrada"**: The `externalReference` ID must match an `id` field in the response from `https://somando-sabores-api.onrender.com/api/Reserva`.
+*   **Vercel Errors**: If you see `TypeError: ... PrismaClient`, ensure `PrismaModule` is removed from `AppModule` imports.
