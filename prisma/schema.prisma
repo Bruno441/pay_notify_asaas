@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Enums
+enum OpcoesServico {
+  pacote
+  reserva
+
+  @@map("opcoes_servico")
+}
+
+enum StatusPagamento {
+  pendente
+  confirmado
+  cancelado
+  concluida
+  atrasada
+  reembolsada
+
+  @@map("status_pagamento")
+}
+
+// Models
+
+model Cliente {
+  id_cliente    String   @id @default(uuid()) @db.Uuid
+  nome_completo String   @db.VarChar(255)
+  email         String   @unique @db.VarChar(100)
+  created_at    DateTime @default(now()) @db.Timestamp
+
+  eventos    Evento[]
+  alunos     Aluno[]
+  reservas   Reserva[]
+  pagamentos Pagamento[]
+
+  @@index([email])
+  @@map("TB_CLIENTES")
+}
+
+model Evento {
+  id_evento   String   @id @default(uuid()) @db.Uuid
+  cliente_id  String   @db.Uuid
+  data_evento DateTime @db.Date
+  detalhes    String   @db.VarChar(1000)
+  created_at  DateTime @default(now()) @db.Timestamp
+
+  cliente Cliente @relation(fields: [cliente_id], references: [id_cliente], onDelete: Cascade)
+
+  @@index([cliente_id])
+  @@index([data_evento])
+  @@map("TB_EVENTOS")
+}
+
+model Aluno {
+  id_aluno   String   @id @default(uuid()) @db.Uuid
+  cliente_id String   @db.Uuid
+  ra         String   @unique @db.VarChar(8)
+  created_at DateTime @default(now()) @db.Timestamp
+
+  cliente Cliente  @relation(fields: [cliente_id], references: [id_cliente], onDelete: Cascade)
+  pacotes Pacote[]
+
+  @@index([cliente_id])
+  @@index([ra])
+  @@map("TB_ALUNOS")
+}
+
+model Precificacao {
+  id_precificacao     String          @id @default(uuid()) @db.Uuid
+  tipo_servico        OpcoesServico
+  quantidade          Int
+  status_precificacao StatusPagamento @default(pendente)
+  total               Decimal         @db.Decimal(10, 2)
+  emitir_nf           Boolean         @default(false)
+  created_at          DateTime        @default(now()) @db.Timestamp
+
+  pacotes  Pacote[]
+  reservas Reserva[]
+
+  @@map("TB_PRECIFICACAO")
+}
+
+model Pacote {
+  id_pacote       String   @id @default(uuid()) @db.Uuid
+  aluno_id        String   @db.Uuid
+  precificacao_id String   @db.Uuid
+  data_inicio     DateTime @db.Date
+  data_final      DateTime @db.Date
+  created_at      DateTime @default(now()) @db.Timestamp
+
+  aluno        Aluno        @relation(fields: [aluno_id], references: [id_aluno], onDelete: Cascade)
+  precificacao Precificacao @relation(fields: [precificacao_id], references: [id_precificacao], onDelete: Cascade)
+  pagamentos   Pagamento[]
+
+  @@index([aluno_id])
+  @@map("TB_PACOTES")
+}
+
+model Reserva {
+  id_reserva      String   @id @default(uuid()) @db.Uuid
+  cliente_id      String   @db.Uuid
+  precificacao_id String   @db.Uuid
+  qtd_convidados  Int      @default(0)
+  data_reserva    DateTime @db.Date
+  created_at      DateTime @default(now()) @db.Timestamp
+
+  cliente      Cliente      @relation(fields: [cliente_id], references: [id_cliente], onDelete: Cascade)
+  precificacao Precificacao @relation(fields: [precificacao_id], references: [id_precificacao], onDelete: Cascade)
+  convidados   Convidado[]
+  pagamentos   Pagamento[]
+
+  @@index([cliente_id])
+  @@index([data_reserva])
+  @@map("TB_RESERVAS")
+}
+
+model Convidado {
+  id_convidado  String   @id @default(uuid()) @db.Uuid
+  reserva_id    String   @db.Uuid
+  nome_completo String   @db.VarChar(255)
+  created_at    DateTime @default(now()) @db.Timestamp
+
+  reserva Reserva @relation(fields: [reserva_id], references: [id_reserva], onDelete: Cascade)
+
+  @@index([reserva_id])
+  @@map("TB_CONVIDADOS")
+}
+
+model Pagamento {
+  id_pagamento    String   @id @default(uuid()) @db.Uuid
+  cliente_id      String   @db.Uuid
+  reserva_id      String?  @db.Uuid
+  pacote_id       String?  @db.Uuid
+  forma_pagamento String   @db.VarChar(35)
+  valor_total     Decimal  @db.Decimal(10, 2)
+  data_pagamento  DateTime @db.Date
+  asaas_id        String   @unique @db.VarChar(40)
+  created_at      DateTime @default(now()) @db.Timestamp
+
+  cliente Cliente  @relation(fields: [cliente_id], references: [id_cliente], onDelete: Cascade)
+  reserva Reserva? @relation(fields: [reserva_id], references: [id_reserva])
+  pacote  Pacote?  @relation(fields: [pacote_id], references: [id_pacote])
+
+  @@index([cliente_id])
+  @@index([asaas_id])
+  @@map("TB_PAGAMENTOS")
+}

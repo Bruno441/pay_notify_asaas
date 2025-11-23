@@ -85,3 +85,4 @@ Thumbs.db
 *.lock
 
 .prettierrc
+/generated/prisma
