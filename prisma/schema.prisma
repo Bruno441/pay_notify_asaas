@@ -43,7 +43,7 @@ model Cliente {
   pagamentos Pagamento[]
 
   @@index([email])
-  @@map("TB_CLIENTES")
+  @@map("tb_clientes")
 }
 
 model Evento {
@@ -57,7 +57,7 @@ model Evento {
 
   @@index([cliente_id])
   @@index([data_evento])
-  @@map("TB_EVENTOS")
+  @@map("tb_eventos")
 }
 
 model Aluno {
@@ -71,7 +71,7 @@ model Aluno {
 
   @@index([cliente_id])
   @@index([ra])
-  @@map("TB_ALUNOS")
+  @@map("tb_alunos")
 }
 
 model Precificacao {
@@ -86,7 +86,7 @@ model Precificacao {
   pacotes  Pacote[]
   reservas Reserva[]
 
-  @@map("TB_PRECIFICACAO")
+  @@map("tb_precificacao")
 }
 
 model Pacote {
@@ -102,7 +102,7 @@ model Pacote {
   pagamentos   Pagamento[]
 
   @@index([aluno_id])
-  @@map("TB_PACOTES")
+  @@map("tb_pacotes")
 }
 
 model Reserva {
@@ -120,7 +120,7 @@ model Reserva {
 
   @@index([cliente_id])
   @@index([data_reserva])
-  @@map("TB_RESERVAS")
+  @@map("tb_reservas")
 }
 
 model Convidado {
@@ -132,7 +132,7 @@ model Convidado {
   reserva Reserva @relation(fields: [reserva_id], references: [id_reserva], onDelete: Cascade)
 
   @@index([reserva_id])
-  @@map("TB_CONVIDADOS")
+  @@map("tb_convidados")
 }
 
 model Pagamento {
@@ -152,5 +152,5 @@ model Pagamento {
 
   @@index([cliente_id])
   @@index([asaas_id])
-  @@map("TB_PAGAMENTOS")
+  @@map("tb_pagamentos")
 }
