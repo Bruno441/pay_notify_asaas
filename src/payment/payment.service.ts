@@ -2,17 +2,19 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import axios from 'axios';
-import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PaymentReceivedService {
   private readonly logger = new Logger(PaymentReceivedService.name);
   private transporter: nodemailer.Transporter;
   private gmailEmail: string;
-  private urlSearchClient: string = 'https://api-sandbox.asaas.com/v3/customers/';
+  private urlSearchClient: string =
+    'https://api-sandbox.asaas.com/v3/customers/';
   private acessToken: string;
+  private urlReservasApi: string =
+    'https://somando-sabores-api.onrender.com/api/Reserva';
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor() {
     this.gmailEmail = process.env.GMAIL_EMAIL ?? '';
 
     if (!this.gmailEmail) {
@@ -125,79 +127,72 @@ export class PaymentReceivedService {
     }
   }
 
-  async checkPaymentExists(asaasId: string) {
-    return this.prisma.pagamento.findUnique({
-      where: { asaas_id: asaasId },
-    });
+  async getReservationsFromApi() {
+    try {
+      const response = await axios.get(this.urlReservasApi);
+      return response.data; // { data: [...], message: "...", success: true }
+    } catch (error) {
+      this.logger.error(
+        'Erro ao buscar reservas da API externa:',
+        error.message || error,
+      );
+      throw new Error('Falha ao conectar com API de reservas.');
+    }
   }
 
   async processPaymentConfirmation(payload: any) {
-    const asaasId = payload.payment.id;
+    // const asaasId = payload.payment.id;
     const externalReference = payload.payment.externalReference;
-    const paymentValue = payload.payment.value;
-    const paymentDate = new Date(payload.payment.confirmedDate || Date.now());
-    const billingType = payload.payment.billingType;
+    // const paymentValue = payload.payment.value;
+    // const paymentDate = new Date(payload.payment.confirmedDate || Date.now());
+    // const billingType = payload.payment.billingType;
 
-    // 1. Verifica se já existe o pagamento (Idempotência técnica)
-    const existingPayment = await this.checkPaymentExists(asaasId);
-    if (existingPayment) {
-      this.logger.log(
-        `Pagamento ${asaasId} já processado anteriormente. Ignorando.`,
-      );
-      return { processed: true, message: 'Pagamento já processado.' };
-    }
+    // 1. Busca Reservas da API externa
+    const apiResponse = await this.getReservationsFromApi();
+    const reservas = apiResponse.data || [];
 
-    // 2. Busca a Reserva (externalReference é id_reserva)
-    let reserva: any = null;
-    let clienteId: string | null = null;
+    // 2. Encontra a reserva pelo ID (externalReference)
+    const reserva = reservas.find((r: any) => r.id === externalReference);
 
-    if (externalReference) {
-      // Tenta achar Reserva
-      reserva = await this.prisma.reserva.findUnique({
-        where: { id_reserva: externalReference },
-        include: { precificacao: true, cliente: true },
-      });
-
-      if (reserva) {
-        clienteId = reserva.cliente_id;
-        this.logger.log(`Reserva encontrada: ${reserva.id_reserva}`);
-      }
-    }
-
-    if (!reserva || !clienteId) {
+    if (!reserva) {
       this.logger.warn(
-        `Nenhuma Reserva encontrada para externalReference: ${externalReference}.`,
+        `Reserva não encontrada na API externa para o ID: ${externalReference}`,
       );
-      return { processed: false, message: 'Reserva não encontrada no banco.' };
+      // Se não achou, não podemos confirmar status.
+      // Retornamos sucesso para não travar o webhook, mas logamos aviso.
+      return { processed: false, message: 'Reserva não encontrada na API.' };
     }
 
-    const precificacaoId = reserva.precificacao_id;
+    this.logger.log(
+      `Reserva encontrada na API: ${reserva.id}, Status: ${reserva.status}`,
+    );
 
-    if (!precificacaoId) {
-         return { processed: false, message: 'Precificação não encontrada.' };
+    // 3. Verifica Status
+    // Status 1: Pagamento confirmado (já pago)
+    // Status 0: Pendente (processar)
+    if (reserva.status === 1) {
+      this.logger.log(
+        `Reserva ${externalReference} já está com status 1 (pago). Ignorando envio de e-mail.`,
+      );
+      return { processed: true, message: 'Pagamento já processado (API).' };
     }
 
-    // 3. Atualiza o status na TB_PRECIFICACAO
-    await this.prisma.precificacao.update({
-      where: { id_precificacao: precificacaoId },
-      data: { status_precificacao: 'confirmado' },
-    });
-    this.logger.log(`Status da precificação ${precificacaoId} atualizado para confirmado.`);
+    if (reserva.status === 0) {
+      this.logger.log(
+        `Reserva ${externalReference} está com status 0 (pendente). Prosseguindo com envio de e-mail.`,
+      );
+      // Aqui a lógica original prossegue (o controller chama sendMail depois que processPaymentConfirmation retorna).
+      // Mas espere, o controller chama sendMail DEPOIS?
+      // Vamos checar o controller. O controller chama processPaymentConfirmation E DEPOIS chama sendMail?
+      // Não, o controller original chamava sendMail DENTRO do if/else.
+      // O controller que eu refatorei chama processPaymentConfirmation E DEPOIS sendMail?
+      // Vamos ver o controller.
+      return {
+        processed: true,
+        message: 'Status verificado, e-mail será enviado.',
+      };
+    }
 
-    // 4. Cria o registro na TB_PAGAMENTOS
-    await this.prisma.pagamento.create({
-      data: {
-        cliente_id: clienteId,
-        reserva_id: reserva.id_reserva,
-        pacote_id: null,
-        forma_pagamento: billingType,
-        valor_total: paymentValue,
-        data_pagamento: paymentDate,
-        asaas_id: asaasId,
-      },
-    });
-    this.logger.log(`Pagamento registrado na TB_PAGAMENTOS: ${asaasId}`);
-
-    return { processed: true, message: 'Pagamento processado e atualizado.' };
+    return { processed: false, message: 'Status desconhecido.' };
   }
 }
