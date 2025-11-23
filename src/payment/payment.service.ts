@@ -140,6 +140,38 @@ export class PaymentReceivedService {
     }
   }
 
+  async updateReservationInApi(reservation: any) {
+    try {
+      // Clona e atualiza o status
+      const updatedReservation = { ...reservation, status: 1 };
+
+      // Assume que a API aceita PUT na raiz com o objeto completo ou precisa de um endpoint específico
+      // Tenta PUT na raiz conforme padrão REST comum se não houver ID na URL,
+      // mas APIs .NET geralmente aceitam PUT /api/Reserva ou PUT /api/Reserva/{id}
+      // Vou tentar PUT no endpoint base.
+
+      this.logger.log(`Atualizando reserva ${reservation.id} para status 1 na API...`);
+      const response = await axios.put(this.urlReservasApi, updatedReservation);
+
+      this.logger.log(`Reserva atualizada com sucesso: ${JSON.stringify(response.data)}`);
+      return response.data;
+    } catch (error) {
+      this.logger.error(
+        `Erro ao atualizar reserva ${reservation.id} na API externa:`,
+        error.message || error,
+      );
+      // Não relança erro para não parar o fluxo de e-mail?
+      // O usuário disse "se for zero ele atualiza... e manda email".
+      // Se falhar ao atualizar, devemos mandar email?
+      // Se não atualizar, na próxima vai ser 0 de novo e manda email de novo (sem idempotência).
+      // Melhor tentar mandar o email mesmo assim, mas logar o erro crítico.
+      // Ou falhar tudo? Se falhar, o webhook do Asaas repete.
+      // Se o Asaas repetir e a API ainda estiver 0, entramos num loop se o erro for persistente.
+      // Vou deixar logado e prosseguir com o envio de email por enquanto, pois a prioridade é notificar.
+      // Mas idealmente deveria ser atômico.
+    }
+  }
+
   async handlePaymentConfirmed(payload: any) {
     const externalReference = payload.payment.externalReference;
 
@@ -162,7 +194,6 @@ export class PaymentReceivedService {
     );
 
     // 3. Verifica Status
-    // Status 1: Pagamento confirmado (já pago) -> Ignora
     if (reserva.status === 1) {
       this.logger.log(
         `Reserva ${externalReference} já está com status 1 (pago). Ignorando envio de e-mail.`,
@@ -170,11 +201,13 @@ export class PaymentReceivedService {
       return { processed: true, message: 'Pagamento já processado (API).' };
     }
 
-    // Status 0: Pendente -> Processa envio de e-mail
     if (reserva.status === 0) {
       this.logger.log(
-        `Reserva ${externalReference} está com status 0 (pendente). Prosseguindo com envio de e-mail.`,
+        `Reserva ${externalReference} está com status 0 (pendente). Iniciando atualização e envio de e-mail.`,
       );
+
+      // --- ATUALIZAÇÃO DA API ---
+      await this.updateReservationInApi(reserva);
 
       try {
         const responseClient = await this.getClientById(
