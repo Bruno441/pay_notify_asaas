@@ -1,12 +1,24 @@
 // src/webhook/asaas.controller.ts
-import { Controller, Post, Body, HttpCode, HttpStatus, Headers, Logger, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Headers,
+  Logger,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PaymentReceivedService } from './payment.service';
 
 @Controller('payment')
 export class PaymentReceivedController {
   private readonly logger = new Logger(PaymentReceivedController.name);
 
-  constructor(private readonly PaymentReceivedService: PaymentReceivedService,) { }
+  constructor(
+    private readonly PaymentReceivedService: PaymentReceivedService,
+  ) {}
   /*
   PAYMENT_RECEIVED/PAYMENT_CONFIRMED
   PAYMENT_OVERDUE -> Pagamento Atrasado
@@ -16,13 +28,11 @@ export class PaymentReceivedController {
 
   @Post('payment-overdue')
   @HttpCode(HttpStatus.OK)
-  async handlePaymentOverdue(
-    @Body() payload: any,
-  ) {
+  async handlePaymentOverdue(@Body() payload: any) {
     this.logger.log(`Pagamento ID ${payload.data.payment.id} está atrasado.`);
     // Lógica para lidar com pagamento atrasado
+    return { received: true };
   }
-
 
   @Post('payment-refunded')
   @HttpCode(HttpStatus.OK)
@@ -34,20 +44,28 @@ export class PaymentReceivedController {
     const TokenSecreto = process.env.ASAAS_WEBHOOK_SECRET;
     if (!TokenSecreto || asaasToken !== TokenSecreto) {
       this.logger.warn('Token do webhook Asaas inválido ou ausente.');
+      // Importante: Mesmo se o token for inválido, em alguns casos, retornar 200 impede retries infinitos se for erro de config.
+      // Mas por segurança, 401 é o correto. O Asaas vai tentar de novo.
       throw new UnauthorizedException('Token inválido');
     }
 
     // Garante que estamos tratando o evento correto
     if (payload.data.event !== 'PAYMENT_REFUNDED') {
-      this.logger.log(`Evento recebido não esperado neste endpoint: ${payload.data.event}`);
-      return { message: 'Webhook recebido, mas evento não corresponde a este endpoint.' };
+      this.logger.log(
+        `Evento recebido não esperado neste endpoint: ${payload.data.event}`,
+      );
+      return { received: true };
     }
 
-    this.logger.log(`Pagamento ID ${payload.data.payment.id} foi reembolsado. Iniciando notificação.`);
+    this.logger.log(
+      `Pagamento ID ${payload.data.payment.id} foi reembolsado. Iniciando notificação.`,
+    );
 
     try {
       // 2. Busca os dados do cliente
-      const responseClient = await this.PaymentReceivedService.getClientById(payload.data.payment.customer);
+      const responseClient = await this.PaymentReceivedService.getClientById(
+        payload.data.payment.customer,
+      );
 
       // 3. Coleta os dados para o e-mail de reembolso
       const nomeDoCliente = responseClient.data.name;
@@ -55,10 +73,15 @@ export class PaymentReceivedController {
       const valor = payload.data.payment.value;
       const descricao = payload.data.payment.description;
       // Usamos a data de criação do evento de webhook como a data do reembolso
-      const dataReembolso = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
+      const dataReembolso = new Date().toLocaleDateString('pt-BR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
       const aliasEmail = 'brunoferreiraj3@gmail.com';
       const nomeDoAlias = 'Somando Sabores';
-      const logoUrl = 'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
+      const logoUrl =
+        'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
 
       // 4. Cria o conteúdo HTML específico para o e-mail de reembolso
       const htmlContent = `
@@ -132,20 +155,27 @@ export class PaymentReceivedController {
         nomeDoAlias,
       );
 
-      return { message: 'Webhook de reembolso recebido e notificação enviada com sucesso!' };
-
+      return {
+        received: true,
+        message:
+          'Webhook de reembolso recebido e notificação enviada com sucesso!',
+      };
     } catch (error) {
       this.logger.error('Falha ao processar webhook de reembolso:', error.stack);
-      throw new BadRequestException({ message: 'Erro ao processar o webhook de reembolso.', error: error.message });
+      // Evitar lançar erro 400/500 se já foi processado parcialmente para não gerar retry.
+      // Mas se falhou e deve tentar de novo (ex: erro de rede), throw.
+      throw new BadRequestException({
+        message: 'Erro ao processar o webhook de reembolso.',
+        error: error.message,
+      });
     }
   }
 
   @Post('payment-received')
   @HttpCode(HttpStatus.OK)
   async handlePaymentWebhook(
-    @Body() body: any // Mudei o nome para 'body' para evitar confusão
+    @Body() body: any, // Mudei o nome para 'body' para evitar confusão
   ) {
-
     this.logger.log(body); // Log do 'wrapper' (corpo todo)
 
     const asaasToken = body.accessToken; // Correto, pega o token do 'body'
@@ -161,13 +191,21 @@ export class PaymentReceivedController {
     // 'body.data' é uma STRING JSON. Temos de fazer o "parse" dela.
     let payload: any; // Esta será a sua variável correta
     try {
-      payload = JSON.parse(body.data);
+      // Verifica se body.data já é objeto ou string
+      if (typeof body.data === 'string') {
+        payload = JSON.parse(body.data);
+      } else {
+        payload = body.data || body; // Fallback se o formato for diferente
+      }
     } catch (e) {
-      this.logger.error('Falha ao fazer JSON.parse() do body.data. Não é um JSON válido.', e);
+      this.logger.error(
+        'Falha ao fazer JSON.parse() do body.data. Não é um JSON válido.',
+        e,
+      );
+      // Se o payload é inválido, não adianta tentar de novo. Retorna 200 com erro logado?
+      // Melhor retornar erro explicito.
       throw new BadRequestException('Payload (body.data) mal formatado.');
     }
-
-    const responseClient = await this.PaymentReceivedService.getClientById(payload.payment.customer);
 
     if (
       payload.event === 'PAYMENT_RECEIVED' ||
@@ -176,7 +214,23 @@ export class PaymentReceivedController {
       this.logger.log(
         `Pagamento ID ${payload.payment.id} teve o evento: ${payload.event}`,
       );
+
       try {
+        // --- NOVA LÓGICA DE INTEGRAÇÃO COM BANCO E IDEMPOTÊNCIA ---
+        const processingResult = await this.PaymentReceivedService.processPaymentConfirmation(payload);
+
+        if (processingResult.message === 'Pagamento já processado.') {
+             // Se já processou, não envia e-mail novamente. Retorna sucesso imediato.
+             return { received: true };
+        }
+
+        // Se chegou aqui, é um pagamento novo confirmado no sistema local.
+        // Segue para o envio de e-mail.
+
+        const responseClient = await this.PaymentReceivedService.getClientById(
+          payload.payment.customer,
+        );
+
         const nomeDoCliente = responseClient.data.name;
         const emailDestinatario = responseClient.data.email;
         const valor = payload.payment.value;
@@ -185,7 +239,8 @@ export class PaymentReceivedController {
         const aliasEmail = 'brunoferreiraj3@gmail.com';
         const nomeDoAlias = 'Somando Sabores';
 
-        const logoUrl = 'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
+        const logoUrl =
+          'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
         const htmlContent = `
               <!DOCTYPE html>
               <html lang="pt-BR">
@@ -256,12 +311,23 @@ export class PaymentReceivedController {
           nomeDoAlias,
         );
       } catch (error) {
-        this.logger.error('Falha ao enviar e-mail de confirmação:', error.stack);
-        throw new BadRequestException({ message: 'Erro ao enviar e-mail de confirmação.', error: error.message });
+        this.logger.error(
+          'Falha ao processar pagamento ou enviar e-mail:',
+          error.stack,
+        );
+        // Se falhar ao enviar email ou salvar no banco, o Asaas deve reenviar?
+        // Sim, se for erro transiente.
+        throw new BadRequestException({
+          message: 'Erro ao processar pagamento.',
+          error: error.message,
+        });
       }
     } else {
-      this.logger.log(`Evento recebido não esperado ou não tratado: ${payload.event}`);
+      this.logger.log(
+        `Evento recebido não esperado ou não tratado: ${payload.event}`,
+      );
     }
-    return { message: 'Webhook recebido com sucesso!' };
+    // Retorno sempre { received: true } para evitar loops de retry infinitos em eventos ignorados ou sucesso.
+    return { received: true };
   }
 }
