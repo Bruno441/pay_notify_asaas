@@ -44,8 +44,6 @@ export class PaymentReceivedController {
     const TokenSecreto = process.env.ASAAS_WEBHOOK_SECRET;
     if (!TokenSecreto || asaasToken !== TokenSecreto) {
       this.logger.warn('Token do webhook Asaas inválido ou ausente.');
-      // Importante: Mesmo se o token for inválido, em alguns casos, retornar 200 impede retries infinitos se for erro de config.
-      // Mas por segurança, 401 é o correto. O Asaas vai tentar de novo.
       throw new UnauthorizedException('Token inválido');
     }
 
@@ -62,17 +60,18 @@ export class PaymentReceivedController {
     );
 
     try {
-      // 2. Busca os dados do cliente
+      // Busca os dados e envia e-mail (agora encapsulado se eu quisesse refatorar o refunded também, mas vou focar no received por enquanto)
+      // Para consistência, o endpoint de reembolso continua "monolítico" no controller por enquanto, mas idealmente deveria ser movido também.
+      // Mas o foco do usuário é o processamento de confirmação que é "lento".
+
       const responseClient = await this.PaymentReceivedService.getClientById(
         payload.data.payment.customer,
       );
 
-      // 3. Coleta os dados para o e-mail de reembolso
       const nomeDoCliente = responseClient.data.name;
       const emailDestinatario = responseClient.data.email;
       const valor = payload.data.payment.value;
       const descricao = payload.data.payment.description;
-      // Usamos a data de criação do evento de webhook como a data do reembolso
       const dataReembolso = new Date().toLocaleDateString('pt-BR', {
         year: 'numeric',
         month: 'long',
@@ -83,7 +82,6 @@ export class PaymentReceivedController {
       const logoUrl =
         'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
 
-      // 4. Cria o conteúdo HTML específico para o e-mail de reembolso
       const htmlContent = `
               <!DOCTYPE html>
               <html lang="pt-BR">
@@ -146,7 +144,6 @@ export class PaymentReceivedController {
               </html>
             `;
 
-      // 5. Envia o e-mail de notificação de reembolso
       await this.PaymentReceivedService.sendMail(
         emailDestinatario,
         'Seu Reembolso foi Processado',
@@ -162,8 +159,6 @@ export class PaymentReceivedController {
       };
     } catch (error) {
       this.logger.error('Falha ao processar webhook de reembolso:', error.stack);
-      // Evitar lançar erro 400/500 se já foi processado parcialmente para não gerar retry.
-      // Mas se falhou e deve tentar de novo (ex: erro de rede), throw.
       throw new BadRequestException({
         message: 'Erro ao processar o webhook de reembolso.',
         error: error.message,
@@ -176,9 +171,9 @@ export class PaymentReceivedController {
   async handlePaymentWebhook(
     @Body() body: any, // Mudei o nome para 'body' para evitar confusão
   ) {
-    this.logger.log(body); // Log do 'wrapper' (corpo todo)
+    // this.logger.log(body); // Reduzindo verbosidade se necessário
 
-    const asaasToken = body.accessToken; // Correto, pega o token do 'body'
+    const asaasToken = body.accessToken;
 
     const TokenSecreto = process.env.ASAAS_WEBHOOK_SECRET;
     if (!TokenSecreto || asaasToken !== TokenSecreto) {
@@ -186,24 +181,18 @@ export class PaymentReceivedController {
       throw new UnauthorizedException('Token inválido');
     }
 
-    // --- INÍCIO DA CORREÇÃO ---
-
-    // 'body.data' é uma STRING JSON. Temos de fazer o "parse" dela.
-    let payload: any; // Esta será a sua variável correta
+    let payload: any;
     try {
-      // Verifica se body.data já é objeto ou string
       if (typeof body.data === 'string') {
         payload = JSON.parse(body.data);
       } else {
-        payload = body.data || body; // Fallback se o formato for diferente
+        payload = body.data || body;
       }
     } catch (e) {
       this.logger.error(
         'Falha ao fazer JSON.parse() do body.data. Não é um JSON válido.',
         e,
       );
-      // Se o payload é inválido, não adianta tentar de novo. Retorna 200 com erro logado?
-      // Melhor retornar erro explicito.
       throw new BadRequestException('Payload (body.data) mal formatado.');
     }
 
@@ -215,119 +204,27 @@ export class PaymentReceivedController {
         `Pagamento ID ${payload.payment.id} teve o evento: ${payload.event}`,
       );
 
+      // --- LÓGICA SIMPLIFICADA ---
+      // Chama o serviço para lidar com tudo.
+      // ATENÇÃO: Em ambientes Serverless (Vercel/AWS Lambda), remover o 'await' abaixo
+      // fará com que a função termine ANTES de enviar o e-mail, cancelando o processo.
+      // Se estiver em um servidor tradicional (VPS, Render Web Service, Container),
+      // você pode remover o 'await' para resposta instantânea.
+
       try {
-        // --- NOVA LÓGICA DE INTEGRAÇÃO COM API EXTERNA ---
-        const processingResult = await this.PaymentReceivedService.processPaymentConfirmation(payload);
-
-        if (processingResult.message === 'Pagamento já processado (API).') {
-             // Se já processou, não envia e-mail novamente. Retorna sucesso imediato.
-             return { received: true };
-        }
-
-        // Se chegou aqui, é um pagamento novo confirmado no sistema local.
-        // Segue para o envio de e-mail.
-
-        const responseClient = await this.PaymentReceivedService.getClientById(
-          payload.payment.customer,
-        );
-
-        const nomeDoCliente = responseClient.data.name;
-        const emailDestinatario = responseClient.data.email;
-        const valor = payload.payment.value;
-        const descricao = payload.payment.description;
-        const dataPagamento = payload.payment.confirmedDate;
-        const aliasEmail = 'brunoferreiraj3@gmail.com';
-        const nomeDoAlias = 'Somando Sabores';
-
-        const logoUrl =
-          'https://raw.githubusercontent.com/Bruno441/pay_notify_asaas/refs/heads/main/assets/logo.png';
-        const htmlContent = `
-              <!DOCTYPE html>
-              <html lang="pt-BR">
-              <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Confirmação de Pagamento</title>
-              </head>
-              <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
-            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-              <td style="padding: 20px 0;">
-                  <table align="center" border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-                <tr>
-                    <td align="center" style="padding: 40px 0 30px 0;">
-                  <img src="${logoUrl}" alt="Logo da Empresa" width="150" style="display: block;" />
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 0 30px 20px 30px;">
-                  <h2 style="color: #333333; margin: 0;">Olá, ${nomeDoCliente}!</h2>
-                  <p style="color: #555555; font-size: 16px; line-height: 1.5;">
-                      Recebemos a confirmação de pagamento para a sua reserva. Agradecemos a preferência!
-                  </p>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 0 30px 30px 30px;">
-                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 1px dashed #D3C5E5; background-color: #fdfcff; border-radius: 8px; padding: 20px;">
-                      <tr>
-                    <td style="color: #333333; font-size: 16px;">
-                        <p style="margin: 0 0 10px 0;"><strong>Descrição:</strong><br>${descricao}</p>
-                        <p style="margin: 0 0 10px 0;"><strong>Valor:</strong><br>R$ ${valor}</p>
-                        <p style="margin: 0;"><strong>Data da confirmação:</strong><br>${dataPagamento}</p>
-                    </td>
-                      </tr>
-                  </table>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 0 30px 40px 30px; text-align: center;">
-                  <p style="color: #555555; font-size: 16px; line-height: 1.5;">
-                      Obrigado por reservar conosco!
-                  </p>
-                    </td>
-                </tr>
-                <tr>
-                    <td bgcolor="#f4f4f4" style="padding: 30px; text-align: center;">
-                  <p style="margin: 0; color: #888888; font-size: 14px;">
-                      Atenciosamente,<br>
-                      Equipe ${nomeDoAlias}
-                  </p>
-                    </td>
-                </tr>
-                  </table>
-              </td>
-                </tr>
-            </table>
-              </body>
-              </html>
-            `;
-
-        await this.PaymentReceivedService.sendMail(
-          emailDestinatario,
-          'Confirmação de Reserva - Pagamento Recebido',
-          htmlContent,
-          aliasEmail,
-          nomeDoAlias,
-        );
+          await this.PaymentReceivedService.handlePaymentConfirmed(payload);
       } catch (error) {
-        this.logger.error(
-          'Falha ao processar pagamento ou enviar e-mail:',
-          error.stack,
-        );
-        // Se falhar ao enviar email ou salvar no banco, o Asaas deve reenviar?
-        // Sim, se for erro transiente.
-        throw new BadRequestException({
-          message: 'Erro ao processar pagamento.',
-          error: error.message,
-        });
+          this.logger.error("Erro ao processar confirmação de pagamento:", error);
+          // Não relançamos o erro para não gerar retry no Asaas se for um erro lógico interno (ex: falha de email),
+          // já que o pagamento foi recebido. Se for crítico, poderia relançar.
       }
     } else {
       this.logger.log(
         `Evento recebido não esperado ou não tratado: ${payload.event}`,
       );
     }
-    // Retorno sempre { received: true } para evitar loops de retry infinitos em eventos ignorados ou sucesso.
+
+    // Retorna sucesso imediatamente para o Asaas
     return { received: true };
   }
 }
